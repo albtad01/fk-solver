@@ -43,7 +43,8 @@ void DiffusionNonLinear<dim>::assemble_system() {
     for (const auto &cell : dof_handler.active_cell_iterators()) {
         if (cell->is_locally_owned()) {
             fe_values.reinit(cell);
-            
+            cell_matrix = 0;
+            cell_rhs    = 0;
 
             for (unsigned int q = 0; q < fe_values.n_quadrature_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; ++i) {
