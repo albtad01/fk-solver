@@ -29,7 +29,8 @@ void DiffusionNonLinear<dim>::setup_system() {
 
 template <int dim>
 void DiffusionNonLinear<dim>::assemble_system() {
-    
+    system_matrix = 0;
+    system_rhs    = 0;
 
     QGauss<dim> quadrature_formula(fe.degree + 1);
     FEValues<dim> fe_values(fe, quadrature_formula, 
