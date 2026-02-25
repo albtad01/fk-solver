@@ -1,4 +1,5 @@
 #include <deal.II/base/multiproc_allocation_pointer.h>
+#include <vector>
 #include "DiffusionNonLinear.hpp"
 #include "parameters.hpp"
 
