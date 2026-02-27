@@ -103,5 +103,28 @@ void DiffusionNonLinear<dim>::run() {
     }
 }
 
+template <int dim>
+Tensor<2, dim> DiffusionNonLinear<dim>::get_diffusion_tensor(
+    const typename DoFHandler<dim>::active_cell_iterator &cell,
+    const Point<dim> &p) const {
+    
+  Tensor<1, dim> direction;
+  // Esempio: Campo radiale (vettore dal centro verso p)
+  if (params.axonal_field == 2) {
+      direction = p / p.norm();
+  } 
+  // Campo assonale (usando i dati della mesh/material_id se disponibili)
+  else if (params.axonal_field == 4) {
+      // Qui caricheresti i dati reali. Per ora usiamo un placeholder:
+      direction[0] = 1.0; // Lungo l'asse X
+  }
+
+  // Costruiamo il tensore: D = d_ext * I + (d_axn - d_ext) * (v ⊗ v)
+  const Tensor<2, dim> identity = unit_symmetric_tensor<dim>();
+  const Tensor<2, dim> dyadic_product = outer_product(direction, direction);
+  
+  return params.d_ext * identity + (params.d_axn - params.d_ext) * dyadic_product;
+}
+
 // Necessario per il linker
 template class DiffusionNonLinear<3>;
