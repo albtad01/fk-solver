@@ -25,6 +25,10 @@ private:
   void solve_time_step();
   void output_results(const unsigned int time_step) const;
   void set_initial_conditions();
+  
+  // Restituisce il tensore di diffusione D(x)
+  Tensor<2, dim> get_diffusion_tensor(const typename DoFHandler<dim>::active_cell_iterator &cell,
+                                      const Point<dim> &p) const;
 
   SimulationParameters params;
 

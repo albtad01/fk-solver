@@ -45,5 +45,14 @@ void DiffusionNonLinear<dim>::solve_time_step() {
   // Risolviamo il sistema lineare A * du = b
   // In questa fase consideriamo il sistema già assemblato con il termine di reazione
   solver.solve(system_matrix, solution, system_rhs, preconditioner);
-  constraints.distribute(solution);
+  constraints.distrib
+  ute(solution);
+}
+template <int dim>
+Tensor<2, dim> DiffusionNonLinear<dim>::get_diffusion_tensor(
+    const typename DoFHandler<dim>::active_cell_iterator &/*cell*/,
+    const Point<dim> &/*p*/) const {
+  
+  // Per ora restituisce un tensore isotropo: D * I
+  return unit_symmetric_tensor<dim>() * params.d_ext;
 }
