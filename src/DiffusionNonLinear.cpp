@@ -80,27 +80,32 @@ void DiffusionNonLinear<dim>::assemble_system() {
 
 template <int dim>
 void DiffusionNonLinear<dim>::run() {
-    pcout << "Running with " << Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) << " MPI ranks." << std::endl;
-    
     setup_system();
-    
-    // Condizioni iniziali: "semina" della proteina
-    VectorTools::interpolate(dof_handler, Functions::ZeroFunction<dim>(), old_solution);
-    solution = old_solution;
+    set_initial_conditions();
 
     double time = 0;
     unsigned int step = 0;
     while (time < params.T) {
         time += params.deltat;
         step++;
-        
-        assemble_system();
-        solve_time_step();
-        
-        if (step % 5 == 0) output_results(step);
-        old_solution = solution;
-        pcout << "Time step: " << step << " at t=" << time << std::endl;
+
+        {
+            TimerOutput::Scope t(computing_timer, "assemble");
+            assemble_system();
+        }
+
+        {
+            TimerOutput::Scope t(computing_timer, "solve");
+            solve_time_step();
+        }
+
+        if (step % 10 == 0) {
+            TimerOutput::Scope t(computing_timer, "output");
+            output_results(step);
+        }
     }
+    
+    // Alla fine della simulazione, il timer stamperà automaticamente la tabella dei tempi
 }
 
 template <int dim>
