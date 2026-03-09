@@ -4,6 +4,8 @@
 #include <vector>
 #include <chrono>
 #include <iomanip>
+#include <deal.II/numerics/data_out.h>
+#include <deal.II/base/timer.h>
 
 /**
  * Main function: Entry point for the Fisher-Kolmogorov simulation.
@@ -84,4 +86,59 @@ int main(int argc, char *argv[])
   }
 
   return 0;
+}
+template <int dim>
+void DiffusionNonLinear<dim>::solve_time_step() {
+  TimerOutput::Scope t(computing_timer, "solve");
+
+  // Controllo del solutore: max 1000 iterazioni, tolleranza basata sulla norma del RHS
+  SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+  
+  // Utilizziamo Conjugate Gradient (CG) di Trilinos, ottimo per matrici simmetriche e definite positive
+  TrilinosWrappers::SolverCG solver(solver_control);
+  
+  // Precondizionatore Jacobi (punto di partenza standard per Trilinos)
+  TrilinosWrappers::PreconditionJacobi preconditioner;
+  preconditioner.initialize(system_matrix);
+
+  // Risoluzione effettiva del sistema A * u = b
+  solver.solve(system_matrix, solution, system_rhs, preconditioner);
+
+  // Distribuiamo i vincoli (se presenti) sulla soluzione appena calcolata
+  constraints.distribute(solution);
+  
+  // Aggiorniamo i DoF "ghost" (necessari per il calcolo del gradiente al passo successivo)
+  solution.update_ghost_values();
+}
+
+template <int dim>
+void DiffusionNonLinear<dim>::output_results(const unsigned int time_step) const {
+  TimerOutput::Scope t(computing_timer, "output");
+
+  DataOut<dim> data_out;
+  data_out.attach_dof_handler(dof_handler);
+  
+  // Aggiungiamo il vettore della soluzione con il nome "u" (concentrazione proteica)
+  data_out.add_data_vector(solution, "u");
+
+  // Costruiamo le "patch" di visualizzazione (necessario per deal.II)
+  data_out.build_patches();
+
+  // Ogni rank MPI scrive la sua porzione di dati in un file .vtu locale
+  const std::string filename = output_dir + "/solution-" + std::to_string(time_step) + 
+                               "." + std::to_string(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)) + ".vtu";
+  
+  std::ofstream output(filename);
+  data_out.write_vtu(output);
+
+  // Solo il processo 0 scrive il file .pvtu che coordina tutti i pezzi
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+    std::vector<std::string> filenames;
+    for (unsigned int i = 0; i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD); ++i) {
+        filenames.push_back("solution-" + std::to_string(time_step) + "." + std::to_string(i) + ".vtu");
+    }
+    
+    std::ofstream master_output(output_dir + "/solution-" + std::to_string(time_step) + ".pvtu");
+    data_out.write_pvtu_record(master_output, filenames);
+  }
 }
