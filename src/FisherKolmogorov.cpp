@@ -142,3 +142,71 @@ void DiffusionNonLinear<dim>::output_results(const unsigned int time_step) const
     data_out.write_pvtu_record(master_output, filenames);
   }
 }
+// --- Implementazione della differenziazione della materia ---
+template <int dim>
+double DiffusionNonLinear<dim>::get_alpha_coefficient(
+    const typename DoFHandler<dim>::active_cell_iterator &cell) const {
+  
+  // Se non è richiesto lo split, restituiamo l'alpha globale
+  if (matter_type == 0)
+    return alpha;
+
+  // Se matter_type == 1, usiamo il MaterialID della mesh:
+  // Assumiamo: ID 0 o 1 -> Materia Bianca, ID 2 -> Materia Grigia
+  // La crescita (alpha) è tipicamente più marcata nella materia grigia
+  if (cell->material_id() == 2)
+    return alpha;      // Materia Grigia: crescita piena
+  else
+    return alpha * 0.1; // Materia Bianca: crescita ridotta (placeholder scientifico)
+}
+
+// --- Implementazione del Seeding (Condizioni Iniziali) ---
+template <int dim>
+void DiffusionNonLinear<dim>::set_initial_conditions(const Point<dim> &center) {
+  pcout << "Setting initial conditions for protein type: " << protein_type << std::endl;
+  
+  // Partiamo da un cervello "sano" (concentrazione zero)
+  VectorTools::interpolate(dof_handler, Functions::ZeroFunction<dim>(), old_solution);
+  
+  // Creiamo un vettore temporaneo per modificare i valori localmente
+  TrilinosWrappers::MPI::Vector distributed_initial_guess;
+  distributed_initial_guess.reinit(locally_owned_dofs, MPI_COMM_WORLD);
+
+  // Definiamo la regione di semina in base alla proteina
+  // Coordinate e raggi basati sulla letteratura medica (es. nucleo basale, ippocampo)
+  for (auto const &cell : dof_handler.active_cell_iterators()) {
+    if (cell->is_locally_owned()) {
+      Point<dim> cell_center = cell->center();
+      double distance = cell_center.distance(center);
+      
+      bool is_seed_region = false;
+      
+      switch (protein_type) {
+        case 1: // Amyloid-beta: semina diffusa o neocorticale
+          if (distance < 20.0) is_seed_region = true;
+          break;
+        case 2: // Tau: semina nel lobo temporale/ippocampo
+          if (cell_center.distance(Point<dim>(40.0, 70.0, 50.0)) < 10.0) is_seed_region = true;
+          break;
+        case 4: // TDP-43 (come nel GIF): semina specifica
+          if (cell_center.distance(Point<dim>( centre[0], centre[1], centre[2] )) < 15.0) 
+            is_seed_region = true;
+          break;
+        default: // Isotropico/Default
+          if (distance < 10.0) is_seed_region = true;
+      }
+
+      if (is_seed_region) {
+        std::vector<types::global_dof_index> local_dof_indices(cell->get_fe().n_dofs_per_cell());
+        cell->get_dof_indices(local_dof_indices);
+        for (auto index : local_dof_indices) {
+          if (locally_owned_dofs.is_element(index))
+            distributed_initial_guess[index] = 0.5; // Concentrazione iniziale al 50%
+        }
+      }
+    }
+  }
+  
+  old_solution = distributed_initial_guess;
+  solution = old_solution;
+}
