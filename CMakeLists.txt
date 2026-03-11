@@ -1,7 +1,16 @@
-cmake_minimum_required(VERSION 3.12.0)
-project(project_title LANGUAGES CXX C)
+cmake_minimum_required(VERSION 3.16)
+project(FisherKolmogorov LANGUAGES CXX)
 
-include(../common/cmake-common.cmake)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(FisherKolmogorov src/FisherKolmogorov.cpp src/DiffusionNonLinear.cpp)
+find_package(deal.II 9.4 CONFIG REQUIRED)
+
+deal_ii_initialize_cached_variables()
+
+add_executable(FisherKolmogorov
+  src/FisherKolmogorov.cpp
+  src/DiffusionNonLinear.cpp
+)
+
 deal_ii_setup_target(FisherKolmogorov)
