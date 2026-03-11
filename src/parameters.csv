@@ -1,0 +1,2 @@
+mesh_file_name,degree,T,deltat,theta,matter_type,protein_type,axonal_field,d_axn,d_ext,alpha,output_dir
+../mesh/brain.msh,2,20.0,0.5,1.0,1,4,4,10.0,5.0,0.25,output
