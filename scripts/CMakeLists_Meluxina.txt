@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.16)
+project(FisherKolmogorov LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(deal.II 9.4 CONFIG REQUIRED)
+
+if(NOT DEAL_II_WITH_MPI)
+  message(FATAL_ERROR "deal.II deve essere compilato con MPI.")
+endif()
+if(NOT DEAL_II_WITH_TRILINOS)
+  message(FATAL_ERROR "deal.II deve essere compilato con Trilinos.")
+endif()
+if(NOT DEAL_II_WITH_P4EST)
+  message(FATAL_ERROR "deal.II deve essere compilato con p4est (fullydistributed).")
+endif()
+
+deal_ii_initialize_cached_variables()
+
+add_executable(FisherKolmogorov
+  src/FisherKolmogorov.cpp
+  src/DiffusionNonLinear.cpp
+)
+
+deal_ii_setup_target(FisherKolmogorov)
