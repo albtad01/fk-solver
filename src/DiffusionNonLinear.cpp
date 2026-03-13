@@ -14,6 +14,7 @@ DiffusionNonLinear::setup(const Point<dim> &center_)
   {
     pcout << "Initializing the mesh" << std::endl;
 
+    // Temporarily serial mesh
     Triangulation<dim> mesh_serial;
 
     GridIn<dim> grid_in;
@@ -21,11 +22,15 @@ DiffusionNonLinear::setup(const Point<dim> &center_)
 
     std::ifstream grid_in_file(mesh_file_name);
     grid_in.read_msh(grid_in_file);
-
+    
+    // Mesh partitioning
     GridTools::partition_triangulation(mpi_size, mesh_serial);
+
+    // Each process extracts from serial mesh just its cells and a ghost layer for communication
     const auto construction_data = TriangulationDescription::Utilities::
       create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
+    // Now each process has in memory just its cells + ghosts
 
     pcout << "  Number of elements = " << mesh.n_global_active_cells()
           << std::endl;
@@ -243,29 +248,6 @@ DiffusionNonLinear::assemble_system()
 
   jacobian_matrix.compress(VectorOperation::add);
   residual_vector.compress(VectorOperation::add);
-/*
-  // We apply Dirichlet boundary conditions.
-  // The linear system solution is delta, which is the difference between
-  // u_{n+1}^{(k+1)} and u_{n+1}^{(k)}. Both must satisfy the same Dirichlet
-  // boundary conditions: therefore, on the boundary, delta = u_{n+1}^{(k+1)} -
-  // u_{n+1}^{(k+1)} = 0. We impose homogeneous Dirichlet BCs.
-  {
-    std::map<types::global_dof_index, double> boundary_values;
-
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-    Functions::ZeroFunction<dim>                        zero_function;
-
-    for (unsigned int i = 0; i < 6; ++i)
-      boundary_functions[i] = &zero_function;
-
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values);
-
-    MatrixTools::apply_boundary_values(
-      boundary_values, jacobian_matrix, delta_owned, residual_vector, false);
-  }
-*/
 }
 
 void
@@ -278,13 +260,11 @@ DiffusionNonLinear::solve_linear_system()
   //SolverCG<TrilinosWrappers::MPI::Vector> solver(solver_control);
 
 //  TrilinosWrappers::PreconditionSSOR preconditioner;
-//  preconditioner.initialize(jacobian_matrix,
-//                            TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
+//  preconditioner.initialize(jacobian_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
 
 //// ILU is fastest, for theoretical guarantees and/or wide parallelism fallback to AMG /////////////////////
 //  TrilinosWrappers::PreconditionILU preconditioner;
-//  preconditioner.initialize(jacobian_matrix,
-//                            TrilinosWrappers::PreconditionILU::AdditionalData(0.0));
+//  preconditioner.initialize(jacobian_matrix, TrilinosWrappers::PreconditionILU::AdditionalData(0.0));
                  
   TrilinosWrappers::PreconditionAMG preconditioner;
   TrilinosWrappers::PreconditionAMG::AdditionalData amg_data;
@@ -293,7 +273,6 @@ DiffusionNonLinear::solve_linear_system()
   amg_data.smoother_sweeps = 2;
   amg_data.aggregation_threshold = 0.02;
   preconditioner.initialize(jacobian_matrix, amg_data);
-
 //  TrilinosWrappers::PreconditionIC preconditioner;
 //  preconditioner.initialize(jacobian_matrix, TrilinosWrappers::PreconditionIC::AdditionalData(1.0));
 
@@ -313,24 +292,6 @@ DiffusionNonLinear::solve_newton()
   unsigned int n_iter        = 0;
   double       residual_norm = residual_tolerance + 1;
 
-  // We apply the boundary conditions to the initial guess (which is stored in
-  // solution_owned and solution).
-  /*{ // TODO is this necessary?
-    IndexSet dirichlet_dofs = DoFTools::extract_boundary_dofs(dof_handler);
-    dirichlet_dofs          = dirichlet_dofs & dof_handler.locally_owned_dofs();
-
-    u_0.set_time(time);
-
-    TrilinosWrappers::MPI::Vector vector_dirichlet(solution_owned);
-    VectorTools::interpolate(dof_handler, u_0, vector_dirichlet);
-
-    for (const auto &idx : dirichlet_dofs)
-      solution_owned[idx] = vector_dirichlet[idx];
-
-    solution_owned.compress(VectorOperation::insert);
-    solution = solution_owned;
-  }*/
-
   while (n_iter < n_max_iters && residual_norm > residual_tolerance)
     {
       assemble_system();
@@ -339,9 +300,6 @@ DiffusionNonLinear::solve_newton()
       pcout << "  Newton iteration " << n_iter << "/" << n_max_iters
             << " - ||r|| = " << std::scientific << std::setprecision(6)
             << residual_norm << std::flush;
-
-      // We actually solve the system only if the residual is larger than the
-      // tolerance.
       if (residual_norm > residual_tolerance)
         {
           solve_linear_system();
